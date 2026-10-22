@@ -6,7 +6,12 @@
 // Every field added beyond the obvious business fields is commented with why.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // debian-openssl-3.0.x matches the node:20-bookworm-slim Docker base
+  // (bookworm ships OpenSSL 3, not 1.1.x) — without this Prisma guesses
+  // wrong at generate time and the runtime container fails to load the
+  // query engine with "libssl.so.1.1: cannot open shared object file".
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {

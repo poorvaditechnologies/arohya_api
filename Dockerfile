@@ -25,6 +25,10 @@ FROM node:20-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
+# Prisma's query engine binary needs libssl at runtime; bookworm-slim
+# doesn't include it by default.
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
