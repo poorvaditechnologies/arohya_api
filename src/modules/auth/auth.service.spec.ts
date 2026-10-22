@@ -5,11 +5,13 @@ import { HashService } from '../../security/hash.service';
 import { IdService } from '../../security/id.service';
 import { I18nService } from '../../common/i18n/i18n.service';
 import { AppException } from '../../common/errors/app.exception';
+import { MailService } from '../../common/mail/mail.service';
 
 describe('AuthService', () => {
   let prisma: any;
   let hash: jest.Mocked<HashService>;
   let tokens: jest.Mocked<TokensService>;
+  let mail: jest.Mocked<MailService>;
   let service: AuthService;
 
   const CONFIG_VALUES: Record<string, any> = {
@@ -41,8 +43,9 @@ describe('AuthService', () => {
     const ids = new IdService();
     const i18n = new I18nService();
     const config = { get: (key: string) => CONFIG_VALUES[key] } as unknown as ConfigService<any, true>;
+    mail = { sendOtpEmail: jest.fn().mockResolvedValue(undefined) } as any;
 
-    service = new AuthService(prisma, hash, ids, tokens, i18n, config);
+    service = new AuthService(prisma, hash, ids, tokens, i18n, config, mail);
   });
 
   describe('generateOtp', () => {
@@ -89,6 +92,26 @@ describe('AuthService', () => {
       expect(result.data.otpRequestId).toBe('otp_req_123');
       expect(result.data.debugOtp).toBeDefined();
       expect(prisma.otpChallenge.create).toHaveBeenCalledTimes(1);
+      expect(mail.sendOtpEmail).toHaveBeenCalledTimes(1);
+      expect(mail.sendOtpEmail).toHaveBeenCalledWith(
+        'a@b.com',
+        result.data.debugOtp,
+        'login',
+        300,
+        'en',
+      );
+    });
+
+    it('still returns a successful response when the OTP email fails to send', async () => {
+      prisma.otpChallenge.count.mockResolvedValue(0);
+      prisma.user.findUnique.mockResolvedValue({ id: 'usr_1' });
+      prisma.otpChallenge.create.mockResolvedValue({ requestId: 'otp_req_999' });
+      mail.sendOtpEmail.mockRejectedValue(new Error('SMTP down'));
+
+      const result = await service.generateOtp({ email: 'a@b.com', purpose: 'login' }, '1.2.3.4', 'en');
+
+      expect(result.data.otpRequestId).toBe('otp_req_999');
+      expect(mail.sendOtpEmail).toHaveBeenCalledTimes(1);
     });
   });
 

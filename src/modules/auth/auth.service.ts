@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OtpChallenge, OtpPurpose, OtpStatus, Prisma, User } from '@prisma/client';
 import { AppConfig } from '../../config/configuration';
@@ -10,6 +10,7 @@ import { I18nService, Lang } from '../../common/i18n/i18n.service';
 import { PrismaService } from '../../database/prisma.service';
 import { HashService } from '../../security/hash.service';
 import { IdService } from '../../security/id.service';
+import { MailService } from '../../common/mail/mail.service';
 import { maskEmail, maskPan } from '../../common/utils/mask.util';
 import { displayToEntityType, entityTypeToDisplay, kycStatusToWire } from '../../common/utils/enum-mappers.util';
 import { TokensService } from './tokens.service';
@@ -31,6 +32,8 @@ function generateNumericOtp(): string {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly hash: HashService,
@@ -38,6 +41,7 @@ export class AuthService {
     private readonly tokens: TokensService,
     private readonly i18n: I18nService,
     private readonly config: ConfigService<AppConfig, true>,
+    private readonly mail: MailService,
   ) {}
 
   // ---------------------------------------------------------------------
@@ -97,6 +101,20 @@ export class AuthService {
       expiresInSeconds: ttlSeconds,
       resendAfterSeconds,
     };
+
+    // Actually deliver the OTP by email. The OTP is already generated,
+    // hashed, and persisted above, so it's valid regardless of whether the
+    // email send below succeeds — an SMTP failure (bad credentials, network
+    // blip, provider rate limit, etc.) must never turn into a 500 for the
+    // caller, since the challenge they need to proceed already exists. We
+    // log and swallow instead of propagating; in development/test,
+    // debugOtp (below) still lets the caller proceed even if mail never
+    // arrives.
+    try {
+      await this.mail.sendOtpEmail(email, otp, dto.purpose, ttlSeconds, lang);
+    } catch (err) {
+      this.logger.error(`Failed to send OTP email to ${maskEmail(email)}: ${(err as Error).message}`);
+    }
 
     // "For local development only, an optional debugOtp field may be
     // returned when the server is explicitly running in development

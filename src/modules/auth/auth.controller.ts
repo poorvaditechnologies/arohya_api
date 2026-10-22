@@ -18,7 +18,14 @@ export class AuthController {
 
   @Post('generate-otp')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Generate and send an email OTP for login or sign-up' })
+  @ApiOperation({
+    summary: 'Generate and send an email OTP for login or sign-up',
+    description:
+      'Generates a one-time code and emails it to the account via SMTP. `debugOtp` is still ' +
+      'included in the response outside production for local testing, but the real code is ' +
+      'always sent to the user\'s inbox regardless of environment; a failed SMTP send is logged ' +
+      'and does not fail this request.',
+  })
   @ApiResponse({
     status: 200,
     description: 'OTP generated and sent successfully',

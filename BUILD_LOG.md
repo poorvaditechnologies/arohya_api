@@ -507,3 +507,67 @@ shape, ownership checks, Swagger style) established in Phases 1–5.
   `ApplicationsService`/`FilesService` do the same, e.g. the 422 "not currently accepting
   applications" message) — translating them is a straightforward follow-up if kn-translated
   error copy is required for this phase specifically.
+
+## Phase: real OTP email delivery (SMTP via nodemailer)
+
+### Problem
+`generate-otp` only ever returned `debugOtp` in the response; there was no actual email-sending
+code anywhere in the codebase. Outside of reading `debugOtp` directly from the API response,
+no OTP ever reached the user, so login/sign-up looked broken end-to-end.
+
+### What changed
+- `src/config/configuration.ts` — added a typed `email` block (`host`, `port`, `secure`, `user`,
+  `password`, `from`) reading `EMAIL_HOST`/`EMAIL_PORT`/`EMAIL_SECURE`/`EMAIL_USER`/
+  `EMAIL_PASSWORD`/`EMAIL_FROM`, same pattern as the existing `aws`/`jwt`/`otp` blocks.
+- `src/common/mail/mail.service.ts` (new) — thin `MailService` wrapper around
+  `nodemailer.createTransport`, mirroring `StorageService`'s role for S3: all SMTP wiring lives
+  here, kept out of `AuthService`. Exposes `sendOtpEmail(to, otp, purpose, expiresInSeconds, lang)`,
+  rendering a plain-text + basic HTML body localized en/kn (same `Lang` type as `I18nService`).
+- `src/common/mail/mail.module.ts` (new) — exports `MailService`; imported by `AuthModule`.
+- `src/modules/auth/auth.module.ts` — imports `MailModule`.
+- `src/modules/auth/auth.service.ts` — `generateOtp` now calls `this.mail.sendOtpEmail(...)` right
+  after the OTP challenge is persisted, in addition to (not instead of) the existing
+  `debugOtp`-outside-production behavior. The call is wrapped in try/catch: an SMTP failure is
+  logged via Nest's `Logger` and swallowed, never turned into a 500 — the OTP challenge is already
+  valid in the DB regardless of whether the email made it out.
+- `src/modules/auth/auth.controller.ts` — `@ApiOperation` on `POST /auth/generate-otp` now notes
+  that a real OTP email is sent via SMTP (not just returned via `debugOtp` in dev), and that a
+  failed send is logged without failing the request. No schema/response example changes — the
+  response contract is unchanged.
+- `package.json` — added `nodemailer` (dependency) and `@types/nodemailer` (devDependency).
+- `.env.example` — added placeholder `EMAIL_*` vars (never the real password).
+- `README.md` — new "Email/OTP delivery env vars (SMTP)" section.
+- Tests: `src/common/mail/mail.service.spec.ts` (mocks `nodemailer#createTransport`/`sendMail`;
+  covers subject/body localization and transport-failure propagation) and new cases in
+  `src/modules/auth/auth.service.spec.ts` asserting `generateOtp` calls `MailService.sendOtpEmail`
+  with the right args, and that a rejected `sendOtpEmail` still yields a normal success response.
+  `MailService` is mocked in `auth.service.spec.ts`'s constructor so the broader auth suite never
+  attempts a real send.
+
+### Verification
+- `npm run build` — succeeds.
+- `npm test` — 38/38 passing (5 suites, including the new `mail.service.spec.ts` and the two new
+  `auth.service.spec.ts` cases).
+- **Real SMTP send** (not mocked): ran a one-off throwaway script using the live `.env` SMTP
+  credentials to send one real email from `noreply@navayuga.com` (envelope from) via
+  `manjunath.naik@floworx.io`'s Gmail SMTP auth to `manjunath.naik@floworx.io` itself (never to a
+  third party). Gmail accepted it: `250 2.0.0 OK ... - gsmtp`, `accepted:
+  ["manjunath.naik@floworx.io"]`, `rejected: []`. The credentials are valid and able to send. The
+  throwaway script was deleted immediately after (`send-test-otp-email.throwaway.js`, not
+  committed).
+
+### Deviations/notes
+- **`EMAIL_FROM` domain mismatch.** `EMAIL_USER` (the SMTP-authenticated account) is
+  `manjunath.naik@floworx.io`, but `EMAIL_FROM` (the envelope/header From shown to recipients) is
+  `noreply@navayuga.com` — a different domain Gmail doesn't own/verify. Gmail still relayed the
+  test send successfully (SMTP AUTH only checks the authenticated account, not the From header),
+  but mail sent "from" a domain the sending account doesn't control is exactly the pattern SPF/
+  DKIM/DMARC alignment checks exist to catch — recipient mail servers (especially corporate ones)
+  may silently spam-box or reject it even though Gmail's own SMTP accepted it. For production,
+  recommend either: (a) set `EMAIL_FROM` to an address on a domain `EMAIL_USER` actually sends for
+  (e.g. `noreply@floworx.io` or a Gmail alias), or (b) if `navayuga.com` is the real intended brand
+  domain, send through an account/provider authorized for that domain (Google Workspace mailbox on
+  navayuga.com, or a transactional provider like SES/SendGrid/Postmark with `navayuga.com`
+  SPF/DKIM records configured) — plain Gmail SMTP from a personal/workspace account is adequate for
+  dev/testing but not recommended as the long-term production path for deliverability and sending
+  limits.

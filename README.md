@@ -72,6 +72,22 @@ AWS_BUCKET_NAME=...
 Read via the same typed `ConfigService` pattern as every other env var (`src/config/configuration.ts`,
 `config.aws.*`). See "File storage (S3)" below for the upload flow.
 
+### Email/OTP delivery env vars (SMTP)
+
+```
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_SECURE=false
+EMAIL_USER=...
+EMAIL_PASSWORD=...
+EMAIL_FROM=...
+```
+
+Used by `MailService` (`src/common/mail/mail.service.ts`) to actually email the OTP code to the
+user on `POST /auth/generate-otp`, via `config.email.*`. `EMAIL_USER`/`EMAIL_PASSWORD` authenticate
+with the SMTP provider; `EMAIL_FROM` is the sender address shown to recipients (for Gmail SMTP it
+should ideally match or be an alias of `EMAIL_USER`'s domain to avoid deliverability issues).
+
 ## Run
 
 ```bash
