@@ -1,0 +1,20 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: arohya-capital-api:local
+    container_name: arohya-capital-api
+    ports:
+      - '3000:3000'
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    restart: unless-stopped
+    # Uses the DATABASE_URL from .env (the real Neon Postgres instance for
+    # this project) — no local `db` service is defined because the task
+    # targets that single real database throughout, not a disposable local
+    # one. Point DATABASE_URL at any other reachable Postgres instance if
+    # you want to run this against a different database.

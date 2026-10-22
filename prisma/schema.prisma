@@ -1,0 +1,480 @@
+// Arohya Capital — Prisma schema
+// Models follow guide section 4 verbatim (User, UserConsent, OtpChallenge,
+// RefreshSession, FinancingProduct, Application, ApplicationAddress,
+// ApplicationTimeline, LoanFacility, UserPreference, SupportChannel,
+// RelationshipManager, CallbackRequest, Notification, AuditEvent).
+// Every field added beyond the obvious business fields is commented with why.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EntityType {
+  SOLE_PROPRIETORSHIP
+  PARTNERSHIP
+  PRIVATE_LIMITED
+  LLP
+  INDIVIDUAL
+}
+
+enum KycStatus {
+  PENDING
+  IN_PROGRESS
+  VERIFIED
+  REJECTED
+}
+
+enum OtpPurpose {
+  LOGIN
+  SIGN_UP
+}
+
+enum OtpStatus {
+  PENDING
+  VERIFIED
+  EXPIRED
+  CONSUMED
+}
+
+enum ApplicationStatus {
+  SUBMITTED
+  UNDERWRITING
+  DOCUMENT_VERIFICATION
+  APPROVED
+  REJECTED
+  DISBURSED
+}
+
+enum TimelineStepStatus {
+  COMPLETED
+  ACTIVE
+  PENDING
+}
+
+enum LoanFacilityStatus {
+  ACTIVE
+  CLOSED
+  OVERDUE
+}
+
+enum SupportChannelType {
+  PHONE
+  WHATSAPP
+  EMAIL
+}
+
+enum CallbackStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum NotificationType {
+  APPLICATION_UPDATE
+  SYSTEM
+  PROMOTIONAL
+}
+
+enum AccountStatus {
+  ACTIVE
+  LOCKED
+}
+
+model User {
+  // Explicit app-generated id (prefix "usr_") to match the guide's example
+  // ids (e.g. "usr_rajesh_01") rather than Prisma's default cuid shape.
+  id        String   @id
+  fullName  String
+  firstName String
+  email     String   @unique
+  // Mobile is optional at sign-up time per guide's sign-up response
+  // (mobileNumber: null) — it is collected later (e.g. during an
+  // application) and stored here when first known.
+  mobileNumber String?
+
+  // PAN uniqueness requirement (guide deviation note #2): unique constraint
+  // + 409 PAN_ALREADY_REGISTERED is enforced at the DB level here and
+  // checked explicitly in AuthService before insert for a clean error.
+  pan        String     @unique
+  entityType EntityType
+  advisorCode String?
+
+  kycStatus KycStatus @default(PENDING)
+
+  // --- Account lock / OTP brute-force protection (guide deviation note #3) ---
+  // Tracks failed OTP verification attempts across login/signup so we can
+  // return 423 ACCOUNT_LOCKED after N consecutive failures (N=5, see
+  // OTP_MAX_VERIFY_ATTEMPTS). Not part of the original guide's explicit
+  // model list but required to implement the behavior the guide calls out.
+  failedOtpAttempts Int           @default(0)
+  accountStatus     AccountStatus @default(ACTIVE)
+  lockedUntil       DateTime?
+
+  // Profile / GSTIN / Account Aggregator fields referenced by GET /profile.
+  // These stay null until a real verification pipeline populates them —
+  // no fake KYC/bureau/AA data is ever generated (guide rule #5).
+  gstin               String?
+  gstinStatus         String?
+  accountAggregatorStatus String?
+  accountAggregatorHandle String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  consents        UserConsent[]
+  otpChallenges   OtpChallenge[]
+  refreshSessions RefreshSession[]
+  applications    Application[]
+  loanFacilities  LoanFacility[]
+  preference      UserPreference?
+  callbackRequests CallbackRequest[]
+  notifications   Notification[]
+  auditEvents     AuditEvent[]
+
+  // Avatar: nullable pointer at the user's current profile-picture
+  // Attachment (ownerType = USER_AVATAR, ownerId = this user's id).
+  // Stored as a plain id column (not a Prisma relation field with
+  // @relation on Attachment, to avoid a circular FK — Attachment already
+  // has uploadedByUserId -> User) so the "current" avatar is a simple
+  // swap-the-pointer operation when a new one is confirmed.
+  avatarAttachmentId String?
+
+  uploadedAttachments Attachment[]
+
+  @@map("users")
+}
+
+model UserConsent {
+  id                   String   @id @default(cuid())
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  termsAccepted        Boolean
+  bureauConsent        Boolean
+  privacyPolicyVersion String
+  acceptedAt           DateTime
+  createdAt            DateTime @default(now())
+
+  @@map("user_consents")
+}
+
+model OtpChallenge {
+  id     String @id @default(cuid())
+  // Public id returned to clients as "otpRequestId" (otp_req_ prefix).
+  requestId String @unique
+
+  // Email is kept even for sign-up attempts where no User exists yet, so a
+  // nullable relation is used.
+  email  String
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  purpose OtpPurpose
+
+  // Only a secure hash of the OTP is ever stored (argon2), per guide's
+  // "Important" notes under endpoint 1. The plaintext OTP is never
+  // persisted or logged.
+  otpHash String
+
+  status            OtpStatus @default(PENDING)
+  attemptsRemaining Int       @default(5)
+  expiresAt         DateTime
+  resendAfter       DateTime
+  consumedAt        DateTime?
+
+  // Rate-limiting bookkeeping (by email+IP) per guide's "Rate-limit OTP
+  // generation by email and IP" instruction. Not an explicit model field
+  // in the guide but necessary to implement that behavior.
+  requestIp String?
+
+  createdAt DateTime @default(now())
+
+  @@index([email, purpose])
+  @@map("otp_challenges")
+}
+
+model RefreshSession {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Only a hash of the refresh token is stored (argon2) so a leaked DB
+  // cannot be used to forge sessions — the guide requires "rotating hashed
+  // refresh tokens".
+  tokenHash String @unique
+
+  deviceId   String?
+  platform   String?
+  appVersion String?
+  rememberDevice Boolean @default(false)
+
+  revoked   Boolean   @default(false)
+  // Set when this session was rotated into a newer one, so reuse of a
+  // stale refresh token can be detected and the whole chain revoked.
+  replacedBySessionId String?
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("refresh_sessions")
+}
+
+model FinancingProduct {
+  id              String  @id
+  slug            String  @unique
+  title            String
+  amountLabel      String
+  badgeText        String
+  badgeTone        String
+  rateLabel        String
+  iconUrl          String
+  fallbackIconKey  String
+  sortOrder        Int
+  visibleInitially Boolean @default(true)
+  applicationEnabled Boolean @default(true)
+  category         String
+  active           Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  applications Application[]
+
+  @@map("financing_products")
+}
+
+model Application {
+  // App-generated id (prefix "application_") to match guide example ids.
+  id                String            @id
+  applicationNumber String            @unique
+
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   FinancingProduct @relation(fields: [productId], references: [id])
+
+  firstName String
+  lastName  String
+  mobile    String
+  email     String?
+  income    Int?
+  loanNeededDate DateTime?
+
+  // GAP #1 (guide deviation note #1): the POST /applications request body
+  // in the guide has NO requestedAmount field, yet GET /applications and
+  // GET /applications/{id} responses DO include requestedAmount. Decision:
+  // requestedAmount stays null at submission time (no fabricated amount is
+  // invented) and is populated later by a real underwriting step. See the
+  // matching comment on CreateApplicationDto and ApplicationsService.
+  requestedAmount Int?
+  currency        String @default("INR")
+
+  status      ApplicationStatus @default(SUBMITTED)
+  currentStep Int               @default(1)
+  totalSteps  Int               @default(4)
+
+  submittedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  addresses ApplicationAddress[]
+  timeline  ApplicationTimeline[]
+
+  @@map("applications")
+}
+
+model ApplicationAddress {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  // "permanent" | "temporary" — distinguishes the two address blocks in the
+  // POST /applications request.
+  kind            String
+  sameAsPermanent Boolean? // only meaningful for kind = "temporary"
+  addressLine     String
+  city            String
+  state           String
+  postalCode      String
+  country         String
+
+  @@map("application_addresses")
+}
+
+model ApplicationTimeline {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  step        Int
+  title       String
+  status      TimelineStepStatus @default(PENDING)
+  completedAt DateTime?
+
+  @@unique([applicationId, step])
+  @@map("application_timelines")
+}
+
+model LoanFacility {
+  // App-generated id (prefix "facility_") to match guide example ids.
+  id               String             @id
+  userId           String
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title            String
+  sanctionedAmount Int
+  currency         String             @default("INR")
+  nextEmiAmount    Int?
+  nextEmiDate      DateTime?
+  status           LoanFacilityStatus @default(ACTIVE)
+  autoDebitActive  Boolean            @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("loan_facilities")
+}
+
+model UserPreference {
+  id                String  @id @default(cuid())
+  userId            String  @unique
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  biometricEnabled  Boolean @default(false)
+
+  updatedAt DateTime @updatedAt
+
+  @@map("user_preferences")
+}
+
+model SupportChannel {
+  id         String             @id
+  type       SupportChannelType
+  title      String
+  subtitle   String
+  actionUrl  String
+  iconUrl    String?
+  fallbackIconKey String
+  sortOrder  Int
+  active     Boolean            @default(true)
+
+  @@map("support_channels")
+}
+
+model RelationshipManager {
+  id               String  @id
+  name             String
+  title            String
+  initials         String
+  available        Boolean @default(true)
+  availabilityLabel String
+  profileImageUrl  String?
+  // Only one active RM record is expected for the current simple support
+  // model; kept as a table (not a singleton config value) so multiple RMs
+  // could be assigned per user/segment later without a schema change.
+  active           Boolean @default(true)
+
+  @@map("relationship_managers")
+}
+
+model CallbackRequest {
+  // App-generated id (prefix "callback_") to match guide example ids.
+  id   String @id
+  userId String
+  user User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  preferredDate     DateTime
+  preferredTimeSlot String
+  topic             String
+  notes             String?
+  status            CallbackStatus @default(SCHEDULED)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("callback_requests")
+}
+
+model Notification {
+  // App-generated id (prefix "notification_") to match guide example ids.
+  id          String           @id
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  message     String
+  type        NotificationType @default(SYSTEM)
+  referenceId String?
+  read        Boolean          @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model AuditEvent {
+  id     String  @id @default(cuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  action   String
+  metadata Json?
+  ip       String?
+  requestId String?
+
+  createdAt DateTime @default(now())
+
+  @@map("audit_events")
+}
+
+// ---------------------------------------------------------------------------
+// FILE STORAGE EXTENSION PHASE (agreed in conversation, not in the original
+// 17-endpoint guide — see BUILD_LOG.md for the full write-up).
+//
+// Polymorphic Attachment model: one reusable table backs every file-upload
+// use case (avatar, application documents, and future ones) so new use
+// cases need no new migration — only a new `ownerType` string value.
+// ---------------------------------------------------------------------------
+enum AttachmentOwnerType {
+  USER_AVATAR
+  APPLICATION_DOCUMENT
+}
+
+enum AttachmentStatus {
+  PENDING
+  CONFIRMED
+}
+
+model Attachment {
+  // App-generated id (prefix "attachment_") to match the rest of the API's
+  // id convention.
+  id String @id
+
+  // Polymorphic owner: ownerType discriminates what ownerId points at
+  // (a User.id for USER_AVATAR, an Application.id for APPLICATION_DOCUMENT).
+  // Not modeled as a Prisma relation on purpose — a single FK can't point
+  // at two different tables — so ownership is instead checked in the
+  // service layer (see FilesService) the same way other cross-entity
+  // ownership checks already work in this codebase (e.g. Application.userId).
+  ownerType AttachmentOwnerType
+  ownerId   String
+
+  // The user who initiated the upload — used for the "a user can only
+  // create/confirm/delete/view attachments they own" rule independent of
+  // ownerType, and kept even though ownerId already encodes ownership for
+  // USER_AVATAR, so the same check works uniformly for every ownerType.
+  uploadedByUserId String
+  uploadedBy       User   @relation(fields: [uploadedByUserId], references: [id], onDelete: Cascade)
+
+  s3Key            String @unique
+  originalFilename String
+  mimeType         String
+  sizeBytes        Int?
+  status           AttachmentStatus @default(PENDING)
+
+  uploadedAt DateTime  @default(now())
+  confirmedAt DateTime?
+
+  @@index([ownerType, ownerId])
+  @@map("attachments")
+}

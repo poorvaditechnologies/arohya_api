@@ -1,0 +1,43 @@
+// Minimal en/kn message dictionary. The guide requires localization support
+// "through Accept-Language: en | kn" for human-readable message strings;
+// field names/structure stay in English per the contract. Business/error
+// codes are never translated (clients key off `code`, not `message`).
+export const DICTIONARY: Record<string, { en: string; kn: string }> = {
+  'otp.sent': { en: 'Verification code sent successfully', kn: 'ಪರಿಶೀಲನಾ ಸಂಕೇತವನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಕಳುಹಿಸಲಾಗಿದೆ' },
+  'login.success': { en: 'Login successful', kn: 'ಲಾಗಿನ್ ಯಶಸ್ವಿಯಾಗಿದೆ' },
+  'signup.success': { en: 'Account created successfully', kn: 'ಖಾತೆ ಯಶಸ್ವಿಯಾಗಿ ರಚಿಸಲಾಗಿದೆ' },
+  'token.refreshed': { en: 'Token refreshed', kn: 'ಟೋಕನ್ ರಿಫ್ರೆಶ್ ಆಗಿದೆ' },
+  'logout.success': { en: 'Logged out successfully', kn: 'ಯಶಸ್ವಿಯಾಗಿ ಲಾಗ್ ಔಟ್ ಆಗಿದೆ' },
+  'financing.retrieved': { en: 'Financing solutions retrieved', kn: 'ಹಣಕಾಸು ಪರಿಹಾರಗಳನ್ನು ಪಡೆಯಲಾಗಿದೆ' },
+  'application.submitted': { en: 'Application submitted successfully', kn: 'ಅರ್ಜಿಯನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಸಲ್ಲಿಸಲಾಗಿದೆ' },
+  'application.list.retrieved': { en: 'Applications retrieved', kn: 'ಅರ್ಜಿಗಳನ್ನು ಪಡೆಯಲಾಗಿದೆ' },
+  'application.detail.retrieved': { en: 'Application details retrieved', kn: 'ಅರ್ಜಿ ವಿವರಗಳನ್ನು ಪಡೆಯಲಾಗಿದೆ' },
+  'dashboard.retrieved': { en: 'Dashboard retrieved', kn: 'ಡ್ಯಾಶ್‌ಬೋರ್ಡ್ ಪಡೆಯಲಾಗಿದೆ' },
+  'facilities.retrieved': { en: 'Loan facilities retrieved', kn: 'ಸಾಲ ಸೌಲಭ್ಯಗಳನ್ನು ಪಡೆಯಲಾಗಿದೆ' },
+  'profile.retrieved': { en: 'Profile retrieved', kn: 'ಪ್ರೊಫೈಲ್ ಪಡೆಯಲಾಗಿದೆ' },
+  'preferences.updated': { en: 'Preferences updated', kn: 'ಆದ್ಯತೆಗಳನ್ನು ನವೀಕರಿಸಲಾಗಿದೆ' },
+  'support.retrieved': { en: 'Support information retrieved', kn: 'ಬೆಂಬಲ ಮಾಹಿತಿಯನ್ನು ಪಡೆಯಲಾಗಿದೆ' },
+  'callback.scheduled': { en: 'Callback scheduled successfully', kn: 'ಕಾಲ್‌ಬ್ಯಾಕ್ ಅನ್ನು ಯಶಸ್ವಿಯಾಗಿ ನಿಗದಿಪಡಿಸಲಾಗಿದೆ' },
+  'notifications.retrieved': { en: 'Notifications retrieved', kn: 'ಅಧಿಸೂಚನೆಗಳನ್ನು ಪಡೆಯಲಾಗಿದೆ' },
+  'notification.read': { en: 'Notification marked as read', kn: 'ಅಧಿಸೂಚನೆಯನ್ನು ಓದಿದಂತೆ ಗುರುತಿಸಲಾಗಿದೆ' },
+
+  'error.validationFailed': { en: 'Validation failed', kn: 'ಮೌಲ್ಯೀಕರಣ ವಿಫಲವಾಗಿದೆ' },
+  'error.invalidEmail': { en: 'Enter a valid email address', kn: 'ಮಾನ್ಯ ಇಮೇಲ್ ವಿಳಾಸವನ್ನು ನಮೂದಿಸಿ' },
+  'error.accountNotFound': { en: 'No account found for this email', kn: 'ಈ ಇಮೇಲ್‌ಗಾಗಿ ಯಾವುದೇ ಖಾತೆ ಕಂಡುಬಂದಿಲ್ಲ' },
+  'error.accountAlreadyExists': { en: 'An account already exists for this email', kn: 'ಈ ಇಮೇಲ್‌ಗಾಗಿ ಖಾತೆ ಈಗಾಗಲೇ ಅಸ್ತಿತ್ವದಲ್ಲಿದೆ' },
+  'error.otpRateLimited': { en: 'Too many OTP requests. Please try again later', kn: 'ಹಲವು OTP ವಿನಂತಿಗಳು. ದಯವಿಟ್ಟು ನಂತರ ಪ್ರಯತ್ನಿಸಿ' },
+  'error.invalidOtp': { en: 'The verification code is incorrect', kn: 'ಪರಿಶೀಲನಾ ಸಂಕೇತ ತಪ್ಪಾಗಿದೆ' },
+  'error.otpExpired': { en: 'The verification code has expired', kn: 'ಪರಿಶೀಲನಾ ಸಂಕೇತ ಅವಧಿ ಮುಗಿದಿದೆ' },
+  'error.otpRequestMismatch': { en: 'This verification code does not match the request', kn: 'ಈ ಪರಿಶೀಲನಾ ಸಂಕೇತ ವಿನಂತಿಗೆ ಹೊಂದಿಕೆಯಾಗುವುದಿಲ್ಲ' },
+  'error.accountLocked': { en: 'Account temporarily locked due to too many failed attempts', kn: 'ಹಲವು ವಿಫಲ ಪ್ರಯತ್ನಗಳಿಂದ ಖಾತೆ ತಾತ್ಕಾಲಿಕವಾಗಿ ಲಾಕ್ ಆಗಿದೆ' },
+  'error.tooManyAttempts': { en: 'Too many attempts. Please try again later', kn: 'ಹಲವು ಪ್ರಯತ್ನಗಳು. ದಯವಿಟ್ಟು ನಂತರ ಪ್ರಯತ್ನಿಸಿ' },
+  'error.invalidPan': { en: 'Enter a valid PAN', kn: 'ಮಾನ್ಯ PAN ನಮೂದಿಸಿ' },
+  'error.consentRequired': { en: 'Statutory consents are required', kn: 'ಕಾನೂನುಬದ್ಧ ಒಪ್ಪಿಗೆಗಳು ಅಗತ್ಯ' },
+  'error.emailAlreadyRegistered': { en: 'This email is already registered', kn: 'ಈ ಇಮೇಲ್ ಈಗಾಗಲೇ ನೋಂದಣಿಯಾಗಿದೆ' },
+  'error.panAlreadyRegistered': { en: 'This PAN is already registered', kn: 'ಈ PAN ಈಗಾಗಲೇ ನೋಂದಣಿಯಾಗಿದೆ' },
+  'error.unauthorized': { en: 'Missing or invalid access token', kn: 'ಪ್ರವೇಶ ಟೋಕನ್ ಕಾಣೆಯಾಗಿದೆ ಅಥವಾ ಅಮಾನ್ಯವಾಗಿದೆ' },
+  'error.accessDenied': { en: 'You do not have access to this resource', kn: 'ಈ ಸಂಪನ್ಮೂಲಕ್ಕೆ ನಿಮಗೆ ಪ್ರವೇಶವಿಲ್ಲ' },
+  'error.resourceNotFound': { en: 'Resource not found', kn: 'ಸಂಪನ್ಮೂಲ ಕಂಡುಬಂದಿಲ್ಲ' },
+  'error.invalidRefreshToken': { en: 'Refresh token is invalid or expired', kn: 'ರಿಫ್ರೆಶ್ ಟೋಕನ್ ಅಮಾನ್ಯ ಅಥವಾ ಅವಧಿ ಮುಗಿದಿದೆ' },
+  'error.internal': { en: 'Something went wrong. Please try again', kn: 'ಏನೋ ತಪ್ಪಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ' },
+};
